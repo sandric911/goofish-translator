@@ -139,12 +139,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
-  if (msg.type === 'openFavs') {
-    chrome.tabs.create({ url: chrome.runtime.getURL('favorites.html') });
-    sendResponse({ ok: true });
-    return false;
-  }
-
   if (msg.type === 'defaults') {
     sendResponse({ ok: true, settings: DEFAULT_SETTINGS });
     return false;

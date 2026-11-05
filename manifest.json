@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Goofish EN — перевод и цены в ₽/$",
   "short_name": "Goofish EN",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Мгновенный перевод Goofish (闲鱼) на английский, цены в ₽/$, расчёт через байера, избранное-корзина и блокировка окон входа.",
   "icons": {
     "16": "icons/icon16.png",
@@ -23,7 +23,7 @@
   "content_scripts": [
     {
       "matches": ["*://goofish.com/*", "*://*.goofish.com/*"],
-      "js": ["dict.js", "content.js"],
+      "js": ["dict.js", "shared.js", "content.js", "favpanel.js"],
       "css": ["content.css"],
       "run_at": "document_start",
       "all_frames": true,

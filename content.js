@@ -725,7 +725,14 @@
     return (await chrome.storage.local.get('favs')).favs || {};
   }
 
-  async function toggleFav(btn) {
+  // клики по ☆ обрабатываем строго по очереди, иначе два быстрых клика перезапишут друг друга
+  let favQueue = Promise.resolve();
+  function toggleFav(btn) {
+    favQueue = favQueue.then(() => doToggleFav(btn)).catch(() => {});
+    return favQueue;
+  }
+
+  async function doToggleFav(btn) {
     let store;
     try { store = await loadFavs(); } catch (e) { toast('Расширение обновилось — перезагрузите страницу', 3000); return; }
     const id = btn.getAttribute('data-gfx-fav');
@@ -742,7 +749,7 @@
     favs = store;
     refreshStars();
     renderCart();
-    chrome.storage.local.set({ favs: store });
+    await chrome.storage.local.set({ favs: store });
   }
 
   // на странице товара обновляем цену сохранённого товара (если продавец её поменял)
@@ -760,39 +767,10 @@
     } catch (e) { /* ignore */ }
   }
 
-  function favTotals() {
-    let cny = 0, count = 0;
-    for (const id in favs) {
-      const f = favs[id];
-      count++;
-      if (f.sel === false) continue;
-      cny += (+f.price || 0) * Math.max(1, +f.qty || 1);
-    }
-    return { cny, count };
-  }
-
-  let cartEl = null;
+  // Кнопка «Избранное» в шапке и всплывающая корзина — в favpanel.js (следит за storage сама)
   function renderCart() {
-    if (!IS_TOP || !document.body) return;
-    const t = favTotals();
-    if (!t.count) { if (cartEl) { cartEl.remove(); cartEl = null; } return; }
-    if (!cartEl || !cartEl.isConnected) {
-      cartEl = mk('div', UI_CLASS + ' gfx-cart');
-      document.body.appendChild(cartEl);
-    }
-    const c = calc(t.cny);
-    cartEl.textContent = '';
-    cartEl.appendChild(mk('span', 'gfx-cart-star', '★'));
-    cartEl.appendChild(mk('span', 'gfx-cart-count', String(t.count)));
-    cartEl.appendChild(mk('span', 'gfx-cart-sum', `с байером ${fmtRub.format(c.buyer)} ₽`));
-    cartEl.title = `Избранное: ${t.count} шт., выбрано на ¥${fmtCny.format(t.cny)}\n` +
-      `С байером: ${fmtRub.format(c.buyer)} ₽ ≈ ${fmtUsd(c.buyerUsd)}\nНажмите, чтобы открыть список`;
-    if (bumpCart) {
-      bumpCart = false;
-      cartEl.classList.remove('gfx-bump');
-      void cartEl.offsetWidth;
-      cartEl.classList.add('gfx-bump');
-    }
+    if (bumpCart && self.GFXPanel) self.GFXPanel.bump();
+    bumpCart = false;
   }
 
   window.addEventListener('click', (e) => {
@@ -804,12 +782,6 @@
       e.stopPropagation();
       e.stopImmediatePropagation();
       toggleFav(star);
-      return;
-    }
-    if (t.closest('.gfx-cart')) {
-      e.preventDefault();
-      e.stopPropagation();
-      sendMessage({ type: 'openFavs' });
     }
   }, true);
 

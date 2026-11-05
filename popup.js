@@ -101,9 +101,15 @@ function bind() {
     save();
   });
 
-  $('openFavs').addEventListener('click', () => {
-    chrome.tabs.create({ url: chrome.runtime.getURL('favorites.html') });
-    window.close();
+  // избранное — всплывающая панель на самой странице Goofish
+  $('openFavs').addEventListener('click', async () => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const fallback = () => chrome.tabs.create({ url: 'https://www.goofish.com/#gfx-favs' });
+    if (!tab) { fallback(); window.close(); return; }
+    chrome.tabs.sendMessage(tab.id, { type: 'openFavPanel' }, (r) => {
+      if (chrome.runtime.lastError || !r || !r.ok) fallback();
+      window.close();
+    });
   });
 
   $('refreshRates').addEventListener('click', async () => {

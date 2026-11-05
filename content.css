@@ -224,3 +224,44 @@ html.gfx-block[data-gfx-unlock] body {
 .gfx-cart-sum { opacity: 0.9; font-weight: 500; }
 .gfx-cart.gfx-bump { animation: gfx-bump 0.35s ease; }
 @keyframes gfx-bump { 40% { transform: scale(1.12); } }
+
+/* ===================== Кнопка «Избранное» в шапке Goofish ===================== */
+.gfx-hdr-fav {
+  all: unset;
+  position: relative;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 4px;
+  margin-left: 16px;
+  height: 24px;
+  cursor: pointer;
+  color: rgb(31, 31, 31);
+  font: 500 12px/20px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  white-space: nowrap;
+  user-select: none;
+}
+.gfx-hdr-fav:focus-visible { outline: 2px solid #1f1f1f; outline-offset: 3px; border-radius: 4px; }
+.gfx-hdr-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  font-size: 19px;
+  line-height: 1;
+}
+.gfx-hdr-txt { text-underline-offset: 3px; }
+.gfx-hdr-fav:hover .gfx-hdr-txt,
+.gfx-hdr-fav.gfx-open .gfx-hdr-txt { text-decoration: underline; }
+.gfx-hdr-badge {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #1f1f1f;
+  color: #ffe60f;
+  font: 700 10px/16px system-ui, -apple-system, sans-serif;
+  text-align: center;
+}
+.gfx-hdr-badge:empty { display: none; }
+.gfx-hdr-fav.gfx-bump .gfx-hdr-ico { animation: gfx-bump 0.35s ease; }

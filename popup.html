@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Goofish EN</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <img src="icons/icon48.png" alt="" width="28" height="28">
+    <div class="title">
+      <strong>Goofish EN</strong>
+      <span id="rateLine" class="muted">курс загружается…</span>
+    </div>
+    <button id="refreshRates" class="icon-btn" title="Обновить курс">↻</button>
+  </header>
+
+  <button id="openFavs" class="fav-card" title="Открыть избранное">
+    <span class="fav-star">★</span>
+    <span class="fav-text"><b id="favCount">Избранное пусто</b><span id="favSum" class="muted">нажмите ☆ у цены на Goofish</span></span>
+    <span class="fav-go">Открыть →</span>
+  </button>
+
+  <section class="card">
+    <h2>Калькулятор</h2>
+    <label class="calc-input">
+      <span>¥</span>
+      <input id="calcCny" type="number" min="0" step="any" placeholder="Цена в юанях" autofocus>
+    </label>
+    <div class="calc-out" id="calcOut">
+      <div><span class="muted">По курсу</span><b id="outRub">—</b><span id="outUsd" class="muted">—</span></div>
+      <div class="buyer"><span class="muted">С байером</span><b id="outBuyer">—</b><span id="outBuyerUsd" class="muted">—</span></div>
+      <div class="formula" id="outFormula"></div>
+    </div>
+    <div class="grid2 buyer-fields">
+      <label class="field"><span>Курс байера, ₽ за ¥</span><input id="buyerRate" type="number" step="0.01" min="0"></label>
+      <label class="field"><span>Комиссия байера, %</span><input id="buyerFee" type="number" step="0.5" min="0"></label>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>На странице</h2>
+    <div class="row-between">
+      <label class="switch"><input id="translate" type="checkbox"><span>Переводить сайт на</span></label>
+      <select id="lang">
+        <option value="en">English</option>
+        <option value="ru">Русский</option>
+      </select>
+    </div>
+    <label class="switch"><input id="blockPopups" type="checkbox"><span>Скрывать окна входа и всплывашки</span></label>
+    <label class="switch"><input id="prices" type="checkbox"><span>Показывать пересчёт цен</span></label>
+    <div class="chips">
+      <label><input id="showRub" type="checkbox"> ₽ по курсу</label>
+      <label><input id="showUsd" type="checkbox"> $ по курсу</label>
+      <label><input id="showBuyer" type="checkbox"> С байером</label>
+    </div>
+    <label class="switch small"><input id="skipStrike" type="checkbox"><span>Не считать зачёркнутые старые цены</span></label>
+  </section>
+
+  <details class="card">
+    <summary>Рыночный курс вручную</summary>
+    <label class="switch small"><input id="manualMode" type="checkbox"><span>Использовать свой курс вместо автоматического</span></label>
+    <div class="grid2" id="manualBox">
+      <label class="field"><span>₽ за 1 ¥</span><input id="manualRub" type="number" step="0.01" min="0"></label>
+      <label class="field"><span>$ за 1 ¥</span><input id="manualUsd" type="number" step="0.0001" min="0"></label>
+    </div>
+  </details>
+
+  <section class="card">
+    <h2>Поиск на Goofish</h2>
+    <form id="searchForm" class="search">
+      <input id="searchQ" type="text" placeholder="Например: чехол iPhone 15 / Nike Dunk" autocomplete="off">
+      <button type="submit">Найти</button>
+    </form>
+    <p class="hint" id="searchHint">Запрос переведётся на китайский. Результаты поиска Goofish показывает только после входа.</p>
+  </section>
+
+  <footer>
+    <button id="toggleOriginal" class="ghost">Оригинал ⇄ перевод <kbd>Alt+T</kbd></button>
+    <button id="clearCache" class="ghost" title="Удалить сохранённые переводы">Кэш <span id="cacheCount"></span> ✕</button>
+  </footer>
+
+  <script src="shared.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

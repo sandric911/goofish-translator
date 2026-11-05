@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Избранное — Goofish EN</title>
+  <link rel="icon" href="icons/icon32.png">
+  <link rel="stylesheet" href="favorites.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <img src="icons/icon48.png" alt="" width="34" height="34">
+      <div>
+        <h1>Избранное</h1>
+        <span id="subtitle" class="muted">—</span>
+      </div>
+    </div>
+    <div class="tools">
+      <label class="check-all"><input id="selAll" type="checkbox"> Выбрать все</label>
+      <select id="sort" title="Сортировка">
+        <option value="new">Сначала новые</option>
+        <option value="old">Сначала старые</option>
+        <option value="cheap">Сначала дешёвые</option>
+        <option value="exp">Сначала дорогие</option>
+      </select>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section id="list" class="list" aria-live="polite"></section>
+
+    <aside class="summary">
+      <h2>Итого</h2>
+      <div class="sum-row"><span>Выбрано</span><b id="sumCount">0</b></div>
+      <div class="sum-row"><span>Сумма в юанях</span><b id="sumCny">¥0</b></div>
+      <div class="sum-row muted"><span>По рыночному курсу</span><span id="sumMarket">0 ₽ · $0</span></div>
+
+      <div class="buyer-box">
+        <span class="muted">С байером</span>
+        <div id="sumBuyer" class="big">0 ₽</div>
+        <div id="sumBuyerUsd" class="muted">≈ $0</div>
+        <div id="sumFormula" class="formula"></div>
+      </div>
+
+      <div class="grid2">
+        <label class="field"><span>Курс байера, ₽ за ¥</span><input id="buyerRate" type="number" step="0.01" min="0"></label>
+        <label class="field"><span>Комиссия, %</span><input id="buyerFee" type="number" step="0.5" min="0"></label>
+      </div>
+
+      <button id="copyList" class="primary">Скопировать список для байера</button>
+      <div class="row-btns">
+        <button id="delSelected" class="ghost">Удалить выбранные</button>
+        <button id="clearAll" class="ghost danger">Очистить всё</button>
+      </div>
+      <p id="rateNote" class="muted small"></p>
+    </aside>
+  </main>
+
+  <template id="rowTpl">
+    <article class="item">
+      <input class="sel" type="checkbox" title="Учитывать в сумме">
+      <a class="thumb" target="_blank" rel="noopener"><img alt=""></a>
+      <div class="info">
+        <a class="title" target="_blank" rel="noopener"></a>
+        <div class="zh"></div>
+        <div class="meta"></div>
+      </div>
+      <div class="price">
+        <label class="cny" title="Цену можно изменить (например, после торга)">¥ <input class="priceInput" type="number" min="0" step="any"></label>
+        <div class="qty">
+          <button class="minus" title="Меньше">−</button>
+          <span class="qn">1</span>
+          <button class="plus" title="Больше">+</button>
+        </div>
+      </div>
+      <div class="totals">
+        <div class="t-buyer"></div>
+        <div class="t-market muted"></div>
+      </div>
+      <button class="del" title="Удалить">✕</button>
+    </article>
+  </template>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="shared.js"></script>
+  <script src="favorites.js"></script>
+</body>
+</html>

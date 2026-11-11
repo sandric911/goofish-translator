@@ -18,7 +18,8 @@ const DEFAULT_SETTINGS = {
   rateMode: 'auto',     // auto | manual
   manualRub: 12.2,      // ручной курс ₽ за 1 ¥
   manualUsd: 0.1496,    // ручной курс $ за 1 ¥
-  blockPopups: true     // скрывать окна входа/регистрации и всплывашки
+  blockPopups: true,    // скрывать окна входа/регистрации и всплывашки
+  minOrder: 300         // минимальная сумма заказа у байера, ¥ (0 — без минимума)
 };
 
 const FALLBACK_RATES = { RUB: 12.18, USD: 0.1496, ts: 0, src: 'встроенный' };

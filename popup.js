@@ -1,10 +1,11 @@
 'use strict';
-/* Popup: калькулятор, настройки, итог избранного, поиск */
+/* Popup: калькулятор, настройки, итог корзины, избранное, поиск */
 
 const $ = (id) => document.getElementById(id);
 let S = { ...GFX_DEFAULTS };
 let marketRates = { RUB: 12.18, USD: 0.1496, ts: 0 };
 let favs = {};
+let cart = {};
 
 function plural(n, one, few, many) {
   const m10 = n % 10, m100 = n % 100;
@@ -39,22 +40,40 @@ function renderCalc() {
 }
 
 function renderFavs() {
-  const list = Object.values(favs);
+  const nFav = Object.keys(favs).length;
+  $('favCount').textContent = nFav
+    ? `Избранное: ${nFav} ${plural(nFav, 'товар', 'товара', 'товаров')}`
+    : 'Избранное пусто';
+
+  const list = Object.values(cart);
+  const sum = $('cartSum');
+  sum.classList.remove('warn');
   if (!list.length) {
-    $('favCount').textContent = 'Избранное пусто';
-    $('favSum').textContent = 'нажмите ☆ у цены на Goofish';
+    $('cartCount').textContent = 'Корзина пуста';
+    sum.textContent = 'нажмите 🛒 у цены на Goofish';
     return;
   }
-  let cny = 0;
-  for (const f of list) if (f.sel !== false) cny += (+f.price || 0) * Math.max(1, +f.qty || 1);
+  let cny = 0, n = 0;
+  for (const f of list) {
+    if (f.sel === false) continue;
+    n++;
+    cny += (+f.price || 0) * Math.max(1, +f.qty || 1);
+  }
   const c = gfxCalc(cny, S, marketRates);
-  $('favCount').textContent = `${list.length} ${plural(list.length, 'товар', 'товара', 'товаров')} в избранном`;
-  $('favSum').textContent = `¥${gfxFmtCny.format(cny)} → с байером ${gfxFmtRub.format(c.buyer)} ₽`;
+  const short = n ? gfxMinShort(cny, S) : 0;
+  $('cartCount').textContent = `${list.length} ${plural(list.length, 'товар', 'товара', 'товаров')} в корзине`;
+  if (short > 0) {
+    sum.classList.add('warn');
+    sum.textContent = `¥${gfxFmtCny.format(cny)} · до минимума ¥${gfxFmtCny.format(+S.minOrder)} не хватает ¥${gfxFmtCny.format(short)}`;
+  } else {
+    sum.textContent = `¥${gfxFmtCny.format(cny)} → с байером ${gfxFmtRub.format(c.buyer)} ₽`;
+  }
 }
 
 function fillForm() {
   $('buyerRate').value = S.buyerRate;
   $('buyerFee').value = S.buyerFee;
+  $('minOrder').value = S.minOrder;
   $('translate').checked = S.translate;
   $('lang').value = S.lang;
   $('blockPopups').checked = S.blockPopups;
@@ -88,6 +107,7 @@ function bind() {
 
   $('buyerRate').addEventListener('input', () => { S.buyerRate = num('buyerRate', GFX_DEFAULTS.buyerRate); save(); });
   $('buyerFee').addEventListener('input', () => { S.buyerFee = num('buyerFee', GFX_DEFAULTS.buyerFee); save(); });
+  $('minOrder').addEventListener('input', () => { S.minOrder = num('minOrder', GFX_DEFAULTS.minOrder); save(); });
   $('manualRub').addEventListener('input', () => { S.manualRub = num('manualRub', GFX_DEFAULTS.manualRub); save(); });
   $('manualUsd').addEventListener('input', () => { S.manualUsd = num('manualUsd', GFX_DEFAULTS.manualUsd); save(); });
 
@@ -101,16 +121,18 @@ function bind() {
     save();
   });
 
-  // избранное — всплывающая панель на самой странице Goofish
-  $('openFavs').addEventListener('click', async () => {
+  // корзина и избранное — всплывающая панель на самой странице Goofish
+  const openPanel = async (mode) => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    const fallback = () => chrome.tabs.create({ url: 'https://www.goofish.com/#gfx-favs' });
+    const fallback = () => chrome.tabs.create({ url: 'https://www.goofish.com/#gfx-' + mode });
     if (!tab) { fallback(); window.close(); return; }
-    chrome.tabs.sendMessage(tab.id, { type: 'openFavPanel' }, (r) => {
+    chrome.tabs.sendMessage(tab.id, { type: 'openPanel', mode }, (r) => {
       if (chrome.runtime.lastError || !r || !r.ok) fallback();
       window.close();
     });
-  });
+  };
+  $('openCart').addEventListener('click', () => openPanel('cart'));
+  $('openFavs').addEventListener('click', () => openPanel('favs'));
 
   $('refreshRates').addEventListener('click', async () => {
     $('refreshRates').classList.add('spin');
@@ -148,6 +170,7 @@ function bind() {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     if (changes.favs) { favs = changes.favs.newValue || {}; renderFavs(); }
+    if (changes.cart) { cart = changes.cart.newValue || {}; renderFavs(); }
   });
 }
 
@@ -156,6 +179,7 @@ function bind() {
   S = { ...GFX_DEFAULTS, ...(all.settings || {}) };
   if (all.rates) marketRates = all.rates;
   favs = all.favs || {};
+  cart = all.cart || {};
   $('cacheCount').textContent = `(${Object.keys(all).filter((k) => k.startsWith('t:')).length})`;
   fillForm();
   bind();

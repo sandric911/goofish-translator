@@ -205,3 +205,27 @@ details.card[open] > summary { margin-bottom: 6px; }
 .fav-text b { font-size: 14px; }
 .fav-text .muted { color: #c7c7cc; font-size: 12px; }
 .fav-go { color: var(--accent); font-weight: 600; font-size: 12px; white-space: nowrap; }
+
+.fav-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 7px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.fav-line:hover { background: #fafafa; }
+.fav-line .fav-star { color: #f5c400; font-size: 16px; }
+.fav-line .fav-text { display: block; font-weight: 500; }
+.fav-line .fav-go { color: var(--muted); }
+.fav-text .warn { color: #ffb340; }
+
+.field.inline input { width: 90px; flex: none; }
+.field.inline { margin: 8px 0 0; gap: 8px; }

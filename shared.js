@@ -1,10 +1,10 @@
 'use strict';
-/* Общие функции для popup и страницы избранного */
+/* Общие функции для popup и панели корзины/избранного */
 
 const GFX_DEFAULTS = {
   translate: true, lang: 'en', prices: true, showRub: true, showUsd: true, showBuyer: true,
   buyerRate: 13.5, buyerFee: 10, skipStrike: true, rateMode: 'auto', manualRub: 12.2, manualUsd: 0.1496,
-  blockPopups: true
+  blockPopups: true, minOrder: 300
 };
 
 const gfxFmtRub = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 });
@@ -32,11 +32,18 @@ function gfxCalc(cny, S, market) {
   };
 }
 
+/** Сколько ¥ не хватает до минимального заказа байера (0 — минимум набран или не задан) */
+function gfxMinShort(cny, S) {
+  const min = +S.minOrder || 0;
+  return min > 0 && cny < min ? min - cny : 0;
+}
+
 async function gfxLoad() {
-  const all = await chrome.storage.local.get(['settings', 'rates', 'favs']);
+  const all = await chrome.storage.local.get(['settings', 'rates', 'favs', 'cart']);
   return {
     S: { ...GFX_DEFAULTS, ...(all.settings || {}) },
     market: all.rates || { RUB: 12.18, USD: 0.1496, ts: 0 },
-    favs: all.favs || {}
+    favs: all.favs || {},
+    cart: all.cart || {}
   };
 }

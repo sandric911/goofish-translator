@@ -21,7 +21,7 @@
   const DEFAULTS = {
     translate: true, lang: 'en', prices: true, showRub: true, showUsd: true, showBuyer: true,
     buyerRate: 13.5, buyerFee: 10, skipStrike: true, rateMode: 'auto', manualRub: 12.2, manualUsd: 0.1496,
-    blockPopups: true
+    blockPopups: true, minOrder: 300
   };
 
   // ------------------------------------------------------------------ state
@@ -483,7 +483,10 @@
       }
       const card = anchor && cardOf(anchor);
       const id = card && itemIdFromHref(card.getAttribute('href'));
-      if (id) b.appendChild(makeStar(id, anchor, amount, false));
+      if (id) {
+        b.appendChild(makeStar(id, anchor, amount, false));
+        b.appendChild(makeCartBtn(id, anchor, amount, false));
+      }
       return b;
     }
 
@@ -510,10 +513,13 @@
     }
     const pid = pageItemId();
     if (pid) {
-      const btn = makeStar(pid, anchor, amount, true);
-      btn.type = 'button';
-      box.appendChild(btn);
-      syncFavPrice(pid, amount);
+      const acts = mk('div', 'gfx-actions');
+      for (const btn of [makeCartBtn(pid, anchor, amount, true), makeStar(pid, anchor, amount, true)]) {
+        btn.type = 'button';
+        acts.appendChild(btn);
+      }
+      box.appendChild(acts);
+      syncSavedPrice(pid, amount);
     }
     return box;
   }
@@ -591,9 +597,11 @@
   }
 
 
-  // ================================================================ favorites
+  // ================================================================ favorites & cart
+  // Два независимых списка в chrome.storage.local: favs (☆ «на потом») и cart (🛒 «хочу купить»)
   let favs = {};
-  let bumpCart = false;
+  let cart = {};
+  let bumpKind = '';
   const priceSynced = new Set();
 
   function cardOf(anchor) {
@@ -613,11 +621,31 @@
   function makeStar(id, anchor, amount, big) {
     const s = big ? mk('button', 'gfx-favbtn') : mk('span', 'gfx-pill gfx-star');
     s.setAttribute('data-gfx-fav', id);
+    s.__kind = 'favs';
     s.__anchor = anchor;
     s.__amount = amount;
     s.__big = big;
     paintStar(s);
     return s;
+  }
+
+  function makeCartBtn(id, anchor, amount, big) {
+    const s = big ? mk('button', 'gfx-favbtn gfx-cartbtn') : mk('span', 'gfx-pill gfx-star gfx-tocart');
+    s.setAttribute('data-gfx-cart', id);
+    s.__kind = 'cart';
+    s.__anchor = anchor;
+    s.__amount = amount;
+    s.__big = big;
+    paintCartBtn(s);
+    return s;
+  }
+
+  function paintCartBtn(s) {
+    const on = !!cart[s.getAttribute('data-gfx-cart')];
+    s.classList.toggle('gfx-on', on);
+    if (s.classList.contains('gfx-favbtn')) s.textContent = on ? '✓ В корзине' : '🛒 В корзину';
+    else s.textContent = on ? '🛒✓' : '🛒';
+    s.title = on ? 'Убрать из корзины' : 'Добавить в корзину';
   }
 
   function paintStar(s) {
@@ -630,6 +658,7 @@
 
   function refreshStars() {
     document.querySelectorAll('[data-gfx-fav]').forEach(paintStar);
+    document.querySelectorAll('[data-gfx-cart]').forEach(paintCartBtn);
   }
 
   // переведённый текст элемента + исходный китайский (из наших записей)
@@ -662,22 +691,26 @@
     return '';
   }
 
-  // когда настоящая картинка подгрузилась — дописываем её в избранное
+  // когда настоящая картинка подгрузилась — дописываем её в избранное и корзину
   async function checkFavImg(im) {
     const card = im.closest && im.closest('a[href*="item?id="]');
     if (!card) return;
     const id = itemIdFromHref(card.getAttribute('href'));
-    if (!id || !favs[id] || favs[id].img) return;
-    const url = imgUrl(im);
-    if (!url) return;
-    try {
-      const store = await loadFavs();
-      if (store[id] && !store[id].img) { store[id].img = url; await chrome.storage.local.set({ favs: store }); }
-    } catch (e) { /* ignore */ }
+    if (!id) return;
+    for (const kind of ['favs', 'cart']) {
+      const list = kind === 'favs' ? favs : cart;
+      if (!list[id] || list[id].img) continue;
+      const url = imgUrl(im);
+      if (!url) return;
+      try {
+        const store = await loadList(kind);
+        if (store[id] && !store[id].img) { store[id].img = url; await chrome.storage.local.set({ [kind]: store }); }
+      } catch (e) { /* ignore */ }
+    }
   }
 
   function collectMeta(btn) {
-    const id = btn.getAttribute('data-gfx-fav');
+    const id = savedId(btn);
     const anchor = btn.__anchor;
     if (!id) return null;
     let title = '', titleZh = '', img = '';
@@ -721,67 +754,76 @@
     return { id, url: 'https://www.goofish.com/item?id=' + id, title, titleZh, price: btn.__amount, listPrice: btn.__amount, img };
   }
 
-  async function loadFavs() {
-    return (await chrome.storage.local.get('favs')).favs || {};
+  function savedId(btn) {
+    return btn.getAttribute(btn.__kind === 'cart' ? 'data-gfx-cart' : 'data-gfx-fav');
   }
 
-  // клики по ☆ обрабатываем строго по очереди, иначе два быстрых клика перезапишут друг друга
-  let favQueue = Promise.resolve();
-  function toggleFav(btn) {
-    favQueue = favQueue.then(() => doToggleFav(btn)).catch(() => {});
-    return favQueue;
+  async function loadList(kind) {
+    return (await chrome.storage.local.get(kind))[kind] || {};
   }
 
-  async function doToggleFav(btn) {
+  // клики по ☆ и 🛒 обрабатываем строго по очереди, иначе два быстрых клика перезапишут друг друга
+  let saveQueue = Promise.resolve();
+  function toggleSaved(btn) {
+    saveQueue = saveQueue.then(() => doToggleSaved(btn)).catch(() => {});
+    return saveQueue;
+  }
+
+  async function doToggleSaved(btn) {
+    const kind = btn.__kind === 'cart' ? 'cart' : 'favs';
+    const isCart = kind === 'cart';
     let store;
-    try { store = await loadFavs(); } catch (e) { toast('Расширение обновилось — перезагрузите страницу', 3000); return; }
-    const id = btn.getAttribute('data-gfx-fav');
+    try { store = await loadList(kind); } catch (e) { toast('Расширение обновилось — перезагрузите страницу', 3000); return; }
+    const id = savedId(btn);
     if (store[id]) {
       delete store[id];
-      toast('Убрано из избранного');
+      toast(isCart ? 'Убрано из корзины' : 'Убрано из избранного');
     } else {
       const meta = collectMeta(btn);
       if (!meta) return;
-      store[id] = { ...meta, qty: 1, sel: true, addedAt: Date.now(), priceAtAdd: meta.price };
-      bumpCart = true;
-      toast('★ Добавлено в избранное');
+      store[id] = { ...meta, addedAt: Date.now(), priceAtAdd: meta.price };
+      if (isCart) { store[id].qty = 1; store[id].sel = true; }
+      bumpKind = kind;
+      toast(isCart ? '🛒 Добавлено в корзину' : '★ Добавлено в избранное');
     }
-    favs = store;
+    if (isCart) cart = store; else favs = store;
     refreshStars();
     renderCart();
-    await chrome.storage.local.set({ favs: store });
+    await chrome.storage.local.set({ [kind]: store });
   }
 
   // на странице товара обновляем цену сохранённого товара (если продавец её поменял)
-  async function syncFavPrice(id, amount) {
-    if (priceSynced.has(id) || !favs[id]) return;
+  async function syncSavedPrice(id, amount) {
+    if (priceSynced.has(id) || (!favs[id] && !cart[id])) return;
     priceSynced.add(id);
-    try {
-      const store = await loadFavs();
-      const f = store[id];
-      if (!f || +f.listPrice === amount) return;
-      f.listPrice = amount;
-      if (!f.manual) f.price = amount;
-      f.updatedAt = Date.now();
-      await chrome.storage.local.set({ favs: store });
-    } catch (e) { /* ignore */ }
+    for (const kind of ['favs', 'cart']) {
+      try {
+        const store = await loadList(kind);
+        const f = store[id];
+        if (!f || +f.listPrice === amount) continue;
+        f.listPrice = amount;
+        if (!f.manual) f.price = amount;
+        f.updatedAt = Date.now();
+        await chrome.storage.local.set({ [kind]: store });
+      } catch (e) { /* ignore */ }
+    }
   }
 
-  // Кнопка «Избранное» в шапке и всплывающая корзина — в favpanel.js (следит за storage сама)
+  // Кнопки «Избранное» и «Корзина» в шапке и всплывающая панель — в favpanel.js (следит за storage сама)
   function renderCart() {
-    if (bumpCart && self.GFXPanel) self.GFXPanel.bump();
-    bumpCart = false;
+    if (bumpKind && self.GFXPanel) self.GFXPanel.bump(bumpKind);
+    bumpKind = '';
   }
 
   window.addEventListener('click', (e) => {
     const t = e.target && e.target.closest ? e.target : null;
     if (!t) return;
-    const star = t.closest('[data-gfx-fav]');
+    const star = t.closest('[data-gfx-fav], [data-gfx-cart]');
     if (star) {
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
-      toggleFav(star);
+      toggleSaved(star);
     }
   }, true);
 
@@ -996,8 +1038,9 @@
       computeSig();
       if (ready) { rescanPrices(); renderCart(); }
     }
-    if (changes.favs) {
-      favs = changes.favs.newValue || {};
+    if (changes.favs || changes.cart) {
+      if (changes.favs) favs = changes.favs.newValue || {};
+      if (changes.cart) cart = changes.cart.newValue || {};
       if (ready) { refreshStars(); renderCart(); }
     }
   });
@@ -1021,6 +1064,7 @@
     S = { ...DEFAULTS, ...(all.settings || {}) };
     if (all.rates) marketRates = all.rates;
     favs = all.favs || {};
+    cart = all.cart || {};
     applyBlockClass();
     const prefix = 't:' + S.lang + ':';
     for (const k in all) {

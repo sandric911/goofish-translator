@@ -15,9 +15,14 @@
     <button id="refreshRates" class="icon-btn" title="Обновить курс">↻</button>
   </header>
 
-  <button id="openFavs" class="fav-card" title="Открыть избранное">
+  <button id="openCart" class="fav-card" title="Открыть корзину">
+    <span class="fav-star">🛒</span>
+    <span class="fav-text"><b id="cartCount">Корзина пуста</b><span id="cartSum" class="muted">нажмите 🛒 у цены на Goofish</span></span>
+    <span class="fav-go">Открыть →</span>
+  </button>
+  <button id="openFavs" class="fav-line" title="Открыть избранное">
     <span class="fav-star">★</span>
-    <span class="fav-text"><b id="favCount">Избранное пусто</b><span id="favSum" class="muted">нажмите ☆ у цены на Goofish</span></span>
+    <span id="favCount" class="fav-text">Избранное пусто</span>
     <span class="fav-go">Открыть →</span>
   </button>
 
@@ -36,6 +41,7 @@
       <label class="field"><span>Курс байера, ₽ за ¥</span><input id="buyerRate" type="number" step="0.01" min="0"></label>
       <label class="field"><span>Комиссия байера, %</span><input id="buyerFee" type="number" step="0.5" min="0"></label>
     </div>
+    <label class="field inline"><span>Минимальный заказ у байера, ¥</span><input id="minOrder" type="number" step="10" min="0" title="0 — без минимума"></label>
   </section>
 
   <section class="card">

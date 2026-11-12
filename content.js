@@ -21,7 +21,7 @@
   const DEFAULTS = {
     translate: true, lang: 'en', prices: true, showRub: true, showUsd: true, showBuyer: true,
     buyerRate: 13.5, buyerFee: 10, skipStrike: true, rateMode: 'auto', manualRub: 12.2, manualUsd: 0.1496,
-    blockPopups: true
+    blockPopups: true, uiScale: 'auto', autoCheck: true
   };
 
   // ------------------------------------------------------------------ state
@@ -483,37 +483,29 @@
       }
       const card = anchor && cardOf(anchor);
       const id = card && itemIdFromHref(card.getAttribute('href'));
-      if (id) b.appendChild(makeStar(id, anchor, amount, false));
+      if (id) {
+        b.appendChild(makeCtl('fav', id, anchor, amount, false));
+        b.appendChild(makeCtl('cart', id, anchor, amount, false));
+      }
       return b;
     }
 
     const box = mk('div', UI_CLASS + ' gfx-card');
     box.title = tip;
-    if (S.showRub || S.showUsd) {
-      const row = mk('div', 'gfx-row');
-      row.appendChild(mk('span', 'gfx-k', 'По курсу'));
-      const parts = [];
-      if (S.showRub) parts.push(`${fmtRub.format(c.rub)} ₽`);
-      if (S.showUsd) parts.push(fmtUsd(c.usd));
-      row.appendChild(mk('span', 'gfx-v', parts.join(' · ')));
-      row.appendChild(mk('span', 'gfx-sub', `1 ¥ = ${c.R.RUB.toFixed(2)} ₽ · $${c.R.USD.toFixed(4)}`));
-      box.appendChild(row);
-    }
-    if (S.showBuyer) {
-      const row = mk('div', 'gfx-row gfx-row--buyer');
-      row.appendChild(mk('span', 'gfx-k', 'С байером'));
-      row.appendChild(mk('span', 'gfx-v gfx-v--big', `${fmtRub.format(c.buyer)} ₽`));
-      row.appendChild(mk('span', 'gfx-sub', `≈ ${fmtUsd(c.buyerUsd)}`));
-      box.appendChild(row);
-      box.appendChild(mk('div', 'gfx-formula',
-        `¥${fmtCny.format(amount)} × ${S.buyerRate} = ${fmtRub2.format(c.base)} ₽  +  ${S.buyerFee}% (${fmtRub2.format(c.fee)} ₽)`));
-    }
+    let main = '';
+    if (S.showBuyer) main = `${fmtRub.format(c.buyer)} ₽`;
+    else if (S.showRub) main = `≈${fmtRub.format(c.rub)} ₽`;
+    else if (S.showUsd) main = fmtUsd(c.usd);
+    if (main) box.appendChild(mk('div', 'gfx-v gfx-v--big', main));
     const pid = pageItemId();
     if (pid) {
-      const btn = makeStar(pid, anchor, amount, true);
-      btn.type = 'button';
-      box.appendChild(btn);
+      const acts = mk('div', 'gfx-acts');
+      acts.appendChild(makeCtl('fav', pid, anchor, amount, true));
+      acts.appendChild(makeCtl('cart', pid, anchor, amount, true));
+      box.appendChild(acts);
       syncFavPrice(pid, amount);
+      syncFavMeta(pid);
+      syncFavStatus(pid);
     }
     return box;
   }
@@ -593,14 +585,17 @@
 
   // ================================================================ favorites
   let favs = {};
-  let bumpCart = false;
+  let bumpCart = '';  // какую кнопку в шапке «подбросить»: 'favs' | 'cart'
   const priceSynced = new Set();
 
-  function cardOf(anchor) {
-    return anchor.closest('a[href*="item?id="]');
-  }
   function itemIdFromHref(href) {
     try { return new URL(href, location.href).searchParams.get('id'); } catch (e) { return null; }
+  }
+  // Ссылка-карточка товара. Нельзя искать по 'item?id=': при нажатии мыши сайт дописывает
+  // метку перехода, и ссылка превращается в item?spm=…&id=… — карточка «терялась» прямо в момент клика по ☆.
+  function cardOf(el) {
+    const a = el && el.closest && el.closest('a[href*="item?"]');
+    return a && itemIdFromHref(a.getAttribute('href')) ? a : null;
   }
   function pageItemId() {
     return location.pathname.startsWith('/item') ? new URLSearchParams(location.search).get('id') : null;
@@ -610,26 +605,44 @@
     return src.startsWith('//') ? 'https:' + src : src;
   }
 
-  function makeStar(id, anchor, amount, big) {
+  // Один товар — одна запись в favs с отметками: fav (в избранном; у старых записей поля нет — считаем, что да)
+  // и cart (в корзине). Запись удаляется, когда сняты обе отметки.
+  const isFav = (f) => !!f && f.fav !== false;
+  const inCart = (f) => !!f && f.cart === true;
+  const CTL = '[data-gfx-fav],[data-gfx-cart]';
+  const ctlKind = (s) => (s.hasAttribute('data-gfx-cart') ? 'cart' : 'fav');
+  const ctlId = (s) => s.getAttribute('data-gfx-cart') || s.getAttribute('data-gfx-fav');
+
+  function makeCtl(kind, id, anchor, amount, big) {
     const s = big ? mk('button', 'gfx-favbtn') : mk('span', 'gfx-pill gfx-star');
-    s.setAttribute('data-gfx-fav', id);
+    if (big) s.type = 'button';
+    s.setAttribute(kind === 'cart' ? 'data-gfx-cart' : 'data-gfx-fav', id);
     s.__anchor = anchor;
     s.__amount = amount;
     s.__big = big;
-    paintStar(s);
+    paintCtl(s);
     return s;
   }
 
-  function paintStar(s) {
-    const on = !!favs[s.getAttribute('data-gfx-fav')];
+  function paintCtl(s) {
+    const cart = ctlKind(s) === 'cart';
+    const f = favs[ctlId(s)];
+    const on = cart ? inCart(f) : isFav(f);
+    const big = s.classList.contains('gfx-favbtn');
     s.classList.toggle('gfx-on', on);
-    if (s.classList.contains('gfx-favbtn')) s.textContent = on ? '★ В избранном' : '☆ В избранное';
-    else s.textContent = on ? '★' : '☆';
-    s.title = on ? 'Убрать из избранного' : 'Добавить в избранное';
+    if (cart) {
+      s.textContent = '';
+      s.appendChild(mk('i', 'gfx-ico-cart'));
+      if (big) s.appendChild(document.createTextNode(on ? 'В корзине ✓' : 'В корзину'));
+      s.title = on ? 'Убрать из корзины' : 'Добавить в корзину';
+    } else {
+      s.textContent = big ? (on ? '★ В избранном' : '☆ В избранное') : (on ? '★' : '☆');
+      s.title = on ? 'Убрать из избранного' : 'Добавить в избранное';
+    }
   }
 
   function refreshStars() {
-    document.querySelectorAll('[data-gfx-fav]').forEach(paintStar);
+    document.querySelectorAll(CTL).forEach(paintCtl);
   }
 
   // переведённый текст элемента + исходный китайский (из наших записей)
@@ -662,12 +675,28 @@
     return '';
   }
 
+  // Фото товара в карточке ленты — самое крупное изображение карточки.
+  // Аватарка продавца и значки лежат в той же ссылке, поэтому мелкие картинки пропускаем.
+  function cardImg(card) {
+    let best = null, area = 0;
+    for (const im of card.querySelectorAll('img')) {
+      if (isOurs(im)) continue;
+      const p = im.parentElement;
+      if (/avatar|seller|user/i.test(String(im.className) + ' ' + String(p ? p.className : ''))) continue;
+      const r = im.getBoundingClientRect();
+      if (r.width < 60 || r.height < 60) continue;
+      if (r.width * r.height > area) { best = im; area = r.width * r.height; }
+    }
+    return best;
+  }
+
   // когда настоящая картинка подгрузилась — дописываем её в избранное
   async function checkFavImg(im) {
-    const card = im.closest && im.closest('a[href*="item?id="]');
+    const card = cardOf(im);
     if (!card) return;
     const id = itemIdFromHref(card.getAttribute('href'));
     if (!id || !favs[id] || favs[id].img) return;
+    if (cardImg(card) !== im) return; // подгрузилась аватарка или значок, а не фото товара
     const url = imgUrl(im);
     if (!url) return;
     try {
@@ -676,8 +705,40 @@
     } catch (e) { /* ignore */ }
   }
 
+  // Первое фото на странице товара. Берём первую миниатюру галереи; если галереи нет — слайд №0.
+  // Просто «первая крупная картинка» не годится: карусель в разметке начинается с копии ПОСЛЕДНЕГО фото.
+  function pagePhoto() {
+    for (const sel of ['[class*="item-main-window-list-item"] img', '.slick-slide[data-index="0"] img']) {
+      const im = document.querySelector(sel);
+      const u = im && !im.closest('.slick-cloned') ? imgUrl(im) : '';
+      if (u) return u;
+    }
+    // галереи и карусели нет (одно фото) — самое крупное фото страницы, кроме копий и карточек рекомендаций
+    let best = null, area = 0;
+    for (const im of document.querySelectorAll('img')) {
+      if (isOurs(im) || im.closest('.slick-cloned, a[href*="item?"]')) continue;
+      if (!/alicdn|fleamarket|bao\/uploaded/.test(im.src)) continue;
+      const r = im.getBoundingClientRect();
+      if (r.width >= 150 && r.width * r.height > area) { best = im; area = r.width * r.height; }
+    }
+    return best ? imgUrl(best) : '';
+  }
+
+  // название и главное фото со страницы товара; named — заголовок уже от товара, а не общий заголовок сайта
+  const SITE_SUFFIX = /\s*[_|\-–—]\s*(闲鱼|Xianyu|Goofish|Idle ?fish)\s*$/i;
+  function pageMeta() {
+    let title = '', titleZh = '', img = '';
+    const t = document.querySelector('title');
+    if (t) [title, titleZh] = textWithOrig(t);
+    const named = SITE_SUFFIX.test(title) || SITE_SUFFIX.test(titleZh);
+    title = title.replace(SITE_SUFFIX, '').trim();
+    titleZh = titleZh.replace(SITE_SUFFIX, '').trim();
+    img = pagePhoto();
+    return { title, titleZh, img, named };
+  }
+
   function collectMeta(btn) {
-    const id = btn.getAttribute('data-gfx-fav');
+    const id = ctlId(btn);
     const anchor = btn.__anchor;
     if (!id) return null;
     let title = '', titleZh = '', img = '';
@@ -695,22 +756,11 @@
             if (v && v.length > 2 && !/^(icon|avatar|image)$/i.test(v)) { title = v; titleZh = o; break; }
           }
         }
-        const im = card.querySelector('img[src*="alicdn"]') || card.querySelector('img');
+        const im = cardImg(card);
         if (im) img = imgUrl(im);
       }
     } else {
-      const t = document.querySelector('title');
-      if (t) [title, titleZh] = textWithOrig(t);
-      const strip = (x) => x.replace(/\s*[_|\-–—]\s*(闲鱼|Xianyu|Goofish|Idle ?fish)\s*$/i, '').trim();
-      title = strip(title);
-      titleZh = strip(titleZh);
-      let best = null, area = 0;
-      for (const im of document.querySelectorAll('img')) {
-        if (isOurs(im) || !/alicdn|fleamarket|bao\/uploaded/.test(im.src)) continue;
-        const r = im.getBoundingClientRect();
-        if (r.width >= 150 && r.width * r.height > area) { best = im; area = r.width * r.height; }
-      }
-      if (best) img = imgUrl(best);
+      ({ title, titleZh, img } = pageMeta());
     }
     // перевод ещё в пути — берём из кэша, если есть
     if (CJK.test(title)) {
@@ -735,16 +785,25 @@
   async function doToggleFav(btn) {
     let store;
     try { store = await loadFavs(); } catch (e) { toast('Расширение обновилось — перезагрузите страницу', 3000); return; }
-    const id = btn.getAttribute('data-gfx-fav');
-    if (store[id]) {
-      delete store[id];
-      toast('Убрано из избранного');
+    const cart = ctlKind(btn) === 'cart';
+    const id = ctlId(btn);
+    const f = store[id];
+    if (cart ? inCart(f) : isFav(f)) {
+      // снимаем отметку; запись остаётся, только если товар есть в другом списке
+      if (cart ? isFav(f) : inCart(f)) { if (cart) f.cart = false; else f.fav = false; }
+      else delete store[id];
+      toast(cart ? 'Убрано из корзины' : 'Убрано из избранного');
     } else {
-      const meta = collectMeta(btn);
-      if (!meta) return;
-      store[id] = { ...meta, qty: 1, sel: true, addedAt: Date.now(), priceAtAdd: meta.price };
-      bumpCart = true;
-      toast('★ Добавлено в избранное');
+      if (f) {
+        if (cart) f.cart = true; else f.fav = true;
+      } else {
+        const meta = collectMeta(btn);
+        if (!meta) return;
+        store[id] = { ...meta, qty: 1, fav: !cart, cart, addedAt: Date.now(), priceAtAdd: meta.price };
+      }
+      if (cart) store[id].cartAt = Date.now();
+      bumpCart = cart ? 'cart' : 'favs';
+      toast(cart ? 'Добавлено в корзину' : '★ Добавлено в избранное');
     }
     favs = store;
     refreshStars();
@@ -767,16 +826,92 @@
     } catch (e) { /* ignore */ }
   }
 
-  // Кнопка «Избранное» в шапке и всплывающая корзина — в favpanel.js (следит за storage сама)
+  // На странице товара сверяем сохранённую запись: дописываем название, если его нет, и ставим
+  // первое фото товара (раньше в запись могла попасть аватарка продавца или последнее фото).
+  const isStubTitle = (f) => !f.title || f.title === 'Item ' + f.id;
+  const imgKey = (u) => (u || '').replace(/^https?:/, '').replace(/_\d+x\d+.*$/, '');
+  const metaSynced = new Set();
+  let metaTimer = 0;
+  function syncFavMeta(id, tries = 0) {
+    if (metaSynced.has(id)) return;
+    clearTimeout(metaTimer);
+    metaTimer = setTimeout(async () => {
+      if (pageItemId() !== id) return;
+      try {
+        const store = await loadFavs();
+        const s = store[id];
+        if (!s) return; // товара нет ни в избранном, ни в корзине
+        const m = pageMeta();
+        let changed = false;
+        if (m.img && imgKey(m.img) !== imgKey(s.img)) { s.img = m.img; changed = true; }
+        if (isStubTitle(s) && m.named && m.title) { s.title = m.title; s.titleZh = m.titleZh; changed = true; }
+        if (changed) await chrome.storage.local.set({ favs: store });
+        if (m.img && !isStubTitle(s)) { metaSynced.add(id); return; }
+      } catch (e) { return; }
+      // страница ещё грузится — попробуем позже
+      if (tries < 5) syncFavMeta(id, tries + 1);
+    }, 1200);
+  }
+
+  // ---- Статус товара: продан / снят с продажи / удалён.
+  // Читаем его со страницы товара, когда пользователь её открыл. Сами сайт не опрашиваем:
+  // на частые запросы карточек Goofish отвечает требованием входа.
+  // Признаки взяты из кода страницы Goofish: на проданном и снятом товаре поверх фото лежит
+  // штамп (блок item-status в карусели), у удалённого — надпись «糟糕！宝贝被删掉了».
+  const STAMP_SOLD = 'O1CN01XvUrci1XK59jkqafe'; // штамп «卖掉了» (продано)
+  const STAMP_OFF = 'O1CN016Us3b321aVpzyxCA4';  // штамп «已下架» (снято)
+  function pageStatus() {
+    const st = document.querySelector('[class*="carousel-container"] [class*="item-status"] img');
+    if (st) {
+      const src = st.currentSrc || st.src || st.getAttribute('data-src') || '';
+      if (src.includes(STAMP_SOLD)) return 'sold';
+      if (src.includes(STAMP_OFF)) return 'off';
+      return src ? 'off' : null; // незнакомый штамп — товар в любом случае недоступен
+    }
+    const tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    let n, k = 0;
+    while ((n = tw.nextNode()) && k++ < 5000) {
+      const rec = textRec.get(n);
+      if ((rec ? rec.orig : n.nodeValue).includes('宝贝被删掉了')) return 'gone';
+    }
+    // товар показан как обычно: есть его заголовок и галерея — значит, в продаже
+    if (pageMeta().named && document.querySelector('[class*="carousel-container"], [class*="item-main-window"]')) return 'ok';
+    return null; // страница ещё грузится или Goofish её не показал — ничего не утверждаем
+  }
+
+  const statusSynced = new Set();
+  let statusTimer = 0;
+  function syncFavStatus(id, tries = 0) {
+    if (!IS_TOP || statusSynced.has(id)) return;
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(async () => {
+      if (pageItemId() !== id) return;
+      const st = pageStatus();
+      if (!st) { if (tries < 6) syncFavStatus(id, tries + 1); return; }
+      statusSynced.add(id);
+      try {
+        const store = await loadFavs();
+        const s = store[id];
+        if (!s) return;
+        const next = st === 'ok' ? undefined : st;
+        if (s.status === next) return;
+        if (next) s.status = next; else delete s.status;
+        s.statusAt = Date.now();
+        await chrome.storage.local.set({ favs: store });
+      } catch (e) { /* ignore */ }
+    }, 1500);
+  }
+
+  // Кнопки «Избранное» и «Корзина» в шапке и всплывающая панель — в favpanel.js (следит за storage сама)
   function renderCart() {
-    if (bumpCart && self.GFXPanel) self.GFXPanel.bump();
-    bumpCart = false;
+    if (bumpCart && self.GFXPanel) self.GFXPanel.bump(bumpCart);
+    bumpCart = '';
   }
 
   window.addEventListener('click', (e) => {
     const t = e.target && e.target.closest ? e.target : null;
     if (!t) return;
-    const star = t.closest('[data-gfx-fav]');
+    const star = t.closest(CTL);
     if (star) {
       e.preventDefault();
       e.stopPropagation();
@@ -788,10 +923,16 @@
   // ================================================================ popup blocker
   const LOGIN_FRAME = /mini_login|passport\.goofish\.com|login\.taobao\.com|havanaone/i;
   let lastClick = 0;
-  let searchNotified = false;
   let itemNotified = false;
   let pageUnblocked = false; // Alt+L — показать окно входа на этой странице
   window.addEventListener('pointerdown', () => { lastClick = Date.now(); }, true);
+
+  function applyScale() {
+    const k = gfxScale(S);
+    const st = document.documentElement.style;
+    st.setProperty('--gfx-zoom', k);
+    st.setProperty('--gfx-zoom-s', 1 + (k - 1) / 2);
+  }
 
   function applyBlockClass() {
     if (!IS_TOP) return;
@@ -803,18 +944,47 @@
   function notifyBlocked() {
     if (Date.now() - lastClick < 2000) {
       toast('Для этого Goofish требует вход — окно входа скрыто. Alt+L — показать', 3500);
-    } else if (!searchNotified && location.pathname.startsWith('/search')) {
-      searchNotified = true;
-      toast('Поиск Goofish показывает товары только после входа. Alt+L — показать окно входа', 5000);
     } else if (!itemNotified && location.pathname.startsWith('/item')) {
       itemNotified = true;
-      // если товар так и не отрисовался — Goofish требует вход (антибот)
+      // если товар так и не отрисовался — Goofish отказал в карточке без входа (сервер отвечает «сессия истекла»)
       setTimeout(() => {
         if (!document.querySelector('.gfx-card') && document.documentElement.classList.contains('gfx-block')) {
-          toast('Goofish не показал товар без входа. Alt+L — показать окно входа', 5000);
+          notifyGate(false);
         }
       }, 4500);
     }
+  }
+
+  // Goofish не отдал данные без входа: на поиске это антибот (baxia), на странице товара — ответ
+  // «сессия истекла». Окно входа скрыто, поэтому без пояснения сайт пишет «сеть пропала» или
+  // показывает пустую выдачу. Говорим прямо, что случилось, и держим сообщение, пока его не закроют.
+  let gateEl = null;
+  let gateDismissed = false;
+  function notifyGate(bot = true) {
+    if (!IS_TOP || gateDismissed || pageUnblocked) return;
+    const p = location.pathname;
+    const search = p.startsWith('/search');
+    const what = search ? 'результаты поиска' : p.startsWith('/item') ? 'этот товар' : 'часть страницы';
+    const text = `Goofish не отдаёт ${what} без входа в аккаунт${bot ? ': сработала его защита от ботов' : ''}. ` +
+      `${search ? 'Пустая выдача или надпись' : 'Надпись'} «сеть пропала» — следствие этого, а не сбой сети или расширения. ` +
+      'Alt+L — показать окно входа';
+    if (!gateEl || !gateEl.isConnected) {
+      gateEl = mk('div', UI_CLASS + ' gfx-gate');
+      gateEl.setAttribute('role', 'alert');
+      const close = mk('button', 'gfx-gate__close', '×');
+      close.type = 'button';
+      close.title = 'Скрыть';
+      close.addEventListener('click', hideGate);
+      gateEl.append(mk('span', 'gfx-gate__text'), close);
+      (document.body || document.documentElement).appendChild(gateEl);
+    }
+    gateEl.firstChild.textContent = text;
+  }
+
+  function hideGate() {
+    gateDismissed = true;
+    if (gateEl) gateEl.remove();
+    gateEl = null;
   }
 
   function checkPopups(root) {
@@ -830,6 +1000,8 @@
         if (getComputedStyle(e).position === 'fixed') host = e;
       }
       if (!host || host.hasAttribute('data-gfx-blocked')) continue;
+      // окно от антибота (baxia): сервер уже отказал в данных и ждёт входа — сообщаем об этом сразу
+      if (/appEntrance=baxia/i.test(f.getAttribute('src') || '') || /baxia/i.test(String(host.className))) notifyGate();
       host.setAttribute('data-gfx-blocked', '');
       const mask = host.previousElementSibling;
       if (mask && /mask/i.test(String(mask.className)) && getComputedStyle(mask).position === 'fixed') {
@@ -960,6 +1132,7 @@
       e.stopPropagation();
       pageUnblocked = !pageUnblocked;
       applyBlockClass();
+      if (pageUnblocked && gateEl) { gateEl.remove(); gateEl = null; }
       toast(pageUnblocked ? 'Окна входа показаны на этой странице (Alt+L — скрыть)' : 'Окна входа снова скрыты');
     }
   }, true);
@@ -974,6 +1147,7 @@
   function onSettingsChanged(prev) {
     computeSig();
     applyBlockClass();
+    applyScale();
     if (S.blockPopups && !prev.blockPopups) checkPopups(document.body);
     if (prev.lang !== S.lang) { location.reload(); return; }
     if (prev.translate !== S.translate) {
@@ -1022,6 +1196,7 @@
     if (all.rates) marketRates = all.rates;
     favs = all.favs || {};
     applyBlockClass();
+    applyScale();
     const prefix = 't:' + S.lang + ':';
     for (const k in all) {
       if (k.charCodeAt(0) === 116 && k.startsWith(prefix)) mem.set(k.slice(prefix.length), all[k]);
@@ -1029,6 +1204,8 @@
     computeSig();
     ready = true;
     fullScan();
+    // удалённый товар показывается без цены, поэтому статус проверяем и без карточки цены
+    if (pageItemId()) syncFavStatus(pageItemId());
 
     // курсы обновляем в фоне (если устарели)
     if (!all.rates || Date.now() - (all.rates.ts || 0) > 6 * 3600 * 1000) {

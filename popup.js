@@ -39,17 +39,28 @@ function renderCalc() {
 }
 
 function renderFavs() {
-  const list = Object.values(favs);
-  if (!list.length) {
+  const all = Object.values(favs);
+  const nf = all.filter((f) => f.fav !== false).length;
+  const cart = all.filter((f) => f.cart === true);
+  if (!nf && !cart.length) {
     $('favCount').textContent = 'Избранное пусто';
-    $('favSum').textContent = 'нажмите ☆ у цены на Goofish';
+    $('favSum').textContent = 'нажмите ☆ или значок корзины у цены на Goofish';
+    return;
+  }
+  $('favCount').textContent = `${nf} в избранном · ${cart.length} в корзине`;
+  if (!cart.length) {
+    $('favSum').textContent = 'положите товар в корзину, чтобы посчитать заказ';
     return;
   }
   let cny = 0;
-  for (const f of list) if (f.sel !== false) cny += (+f.price || 0) * Math.max(1, +f.qty || 1);
+  for (const f of cart) cny += (+f.price || 0) * Math.max(1, +f.qty || 1);
   const c = gfxCalc(cny, S, marketRates);
-  $('favCount').textContent = `${list.length} ${plural(list.length, 'товар', 'товара', 'товаров')} в избранном`;
-  $('favSum').textContent = `¥${gfxFmtCny.format(cny)} → с байером ${gfxFmtRub.format(c.buyer)} ₽`;
+  $('favSum').textContent = `Корзина: ¥${gfxFmtCny.format(cny)} → с байером ${gfxFmtRub.format(c.buyer)} ₽`;
+}
+
+// само окно настроек увеличиваем умереннее: браузер ограничивает его размер 800×600
+function applyScale() {
+  document.documentElement.style.zoom = Math.min(1.3, gfxScale(S));
 }
 
 function fillForm() {
@@ -57,12 +68,16 @@ function fillForm() {
   $('buyerFee').value = S.buyerFee;
   $('translate').checked = S.translate;
   $('lang').value = S.lang;
+  $('uiScale').value = String(S.uiScale == null ? 'auto' : S.uiScale);
+  if ($('uiScale').selectedIndex < 0) $('uiScale').value = 'auto';
+  applyScale();
   $('blockPopups').checked = S.blockPopups;
   $('prices').checked = S.prices;
   $('showRub').checked = S.showRub;
   $('showUsd').checked = S.showUsd;
   $('showBuyer').checked = S.showBuyer;
   $('skipStrike').checked = S.skipStrike;
+  $('autoCheck').checked = S.autoCheck !== false;
   $('manualMode').checked = S.rateMode === 'manual';
   $('manualRub').value = S.manualRub;
   $('manualUsd').value = S.manualUsd;
@@ -91,10 +106,16 @@ function bind() {
   $('manualRub').addEventListener('input', () => { S.manualRub = num('manualRub', GFX_DEFAULTS.manualRub); save(); });
   $('manualUsd').addEventListener('input', () => { S.manualUsd = num('manualUsd', GFX_DEFAULTS.manualUsd); save(); });
 
-  for (const id of ['translate', 'blockPopups', 'prices', 'showRub', 'showUsd', 'showBuyer', 'skipStrike']) {
+  for (const id of ['translate', 'blockPopups', 'prices', 'showRub', 'showUsd', 'showBuyer', 'skipStrike', 'autoCheck']) {
     $(id).addEventListener('change', () => { S[id] = $(id).checked; save(); });
   }
   $('lang').addEventListener('change', () => { S.lang = $('lang').value; save(); });
+  $('uiScale').addEventListener('change', () => {
+    const v = $('uiScale').value;
+    S.uiScale = v === 'auto' ? 'auto' : parseFloat(v);
+    applyScale();
+    save();
+  });
   $('manualMode').addEventListener('change', () => {
     S.rateMode = $('manualMode').checked ? 'manual' : 'auto';
     $('manualBox').classList.toggle('off', S.rateMode !== 'manual');
@@ -106,7 +127,8 @@ function bind() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const fallback = () => chrome.tabs.create({ url: 'https://www.goofish.com/#gfx-favs' });
     if (!tab) { fallback(); window.close(); return; }
-    chrome.tabs.sendMessage(tab.id, { type: 'openFavPanel' }, (r) => {
+    const view = Object.values(favs).some((f) => f.cart === true) ? 'cart' : 'favs';
+    chrome.tabs.sendMessage(tab.id, { type: 'openFavPanel', view }, (r) => {
       if (chrome.runtime.lastError || !r || !r.ok) fallback();
       window.close();
     });

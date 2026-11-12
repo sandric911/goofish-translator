@@ -9,16 +9,16 @@
   <header>
     <img src="icons/icon48.png" alt="" width="28" height="28">
     <div class="title">
-      <strong>Goofish EN</strong>
+      <strong>Goofish EN <span class="zh">闲鱼助手</span></strong>
       <span id="rateLine" class="muted">курс загружается…</span>
     </div>
     <button id="refreshRates" class="icon-btn" title="Обновить курс">↻</button>
   </header>
 
-  <button id="openFavs" class="fav-card" title="Открыть избранное">
+  <button id="openFavs" class="fav-card" title="Открыть избранное и корзину">
     <span class="fav-star">★</span>
-    <span class="fav-text"><b id="favCount">Избранное пусто</b><span id="favSum" class="muted">нажмите ☆ у цены на Goofish</span></span>
-    <span class="fav-go">Открыть →</span>
+    <span class="fav-text"><b id="favCount">Избранное пусто</b><span id="favSum" class="muted">нажмите ☆ или значок корзины у цены на Goofish</span></span>
+    <span class="fav-go">Открыть »</span>
   </button>
 
   <section class="card">
@@ -55,6 +55,18 @@
       <label><input id="showBuyer" type="checkbox"> С байером</label>
     </div>
     <label class="switch small"><input id="skipStrike" type="checkbox"><span>Не считать зачёркнутые старые цены</span></label>
+    <label class="switch small"><input id="autoCheck" type="checkbox"><span>Изредка проверять, не проданы ли товары из списка</span></label>
+    <div class="row-between scale-row">
+      <span>Размер интерфейса</span>
+      <select id="uiScale">
+        <option value="auto">Авто (по экрану)</option>
+        <option value="1">100%</option>
+        <option value="1.2">120%</option>
+        <option value="1.4">140%</option>
+        <option value="1.6">160%</option>
+        <option value="1.8">180%</option>
+      </select>
+    </div>
   </section>
 
   <details class="card">
@@ -72,13 +84,15 @@
       <input id="searchQ" type="text" placeholder="Например: чехол iPhone 15 / Nike Dunk" autocomplete="off">
       <button type="submit">Найти</button>
     </form>
-    <p class="hint" id="searchHint">Запрос переведётся на китайский. Результаты поиска Goofish показывает только после входа.</p>
+    <p class="hint" id="searchHint">Запрос переведётся на китайский.</p>
   </section>
 
   <footer>
     <button id="toggleOriginal" class="ghost">Оригинал ⇄ перевод <kbd>Alt+T</kbd></button>
     <button id="clearCache" class="ghost" title="Удалить сохранённые переводы">Кэш <span id="cacheCount"></span> ✕</button>
   </footer>
+
+  <p class="copy">© 2005–2026 Goofish EN · лучше смотреть в 1024×768</p>
 
   <script src="shared.js"></script>
   <script src="popup.js"></script>

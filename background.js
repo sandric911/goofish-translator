@@ -18,7 +18,9 @@ const DEFAULT_SETTINGS = {
   rateMode: 'auto',     // auto | manual
   manualRub: 12.2,      // ручной курс ₽ за 1 ¥
   manualUsd: 0.1496,    // ручной курс $ за 1 ¥
-  blockPopups: true     // скрывать окна входа/регистрации и всплывашки
+  blockPopups: true,    // скрывать окна входа/регистрации и всплывашки
+  uiScale: 'auto',      // размер интерфейса: auto — по экрану, либо число
+  autoCheck: true       // изредка проверять в фоне, не проданы ли товары из списка
 };
 
 const FALLBACK_RATES = { RUB: 12.18, USD: 0.1496, ts: 0, src: 'встроенный' };
@@ -109,15 +111,37 @@ async function pruneCache() {
   }
 }
 
+// ----------------------------- восстановление избранного -------------------
+
+// Если в папке расширения лежит restore-favs.json ({ stamp, favs }), один раз дописываем
+// из него недостающие товары в избранное. Уже сохранённые записи не трогаем; повторно
+// файл с тем же stamp не применяется, так что удалённые вручную товары не возвращаются.
+async function restoreFavsOnce() {
+  let data;
+  try {
+    const res = await fetch(chrome.runtime.getURL('restore-favs.json'));
+    if (!res.ok) return;
+    data = await res.json();
+  } catch (e) {
+    return; // файла нет — восстанавливать нечего
+  }
+  if (!data || !data.stamp || !data.favs) return;
+  const { favs, favsRestored } = await chrome.storage.local.get(['favs', 'favsRestored']);
+  if (favsRestored === data.stamp) return;
+  await chrome.storage.local.set({ favs: { ...data.favs, ...(favs || {}) }, favsRestored: data.stamp });
+}
+
 chrome.runtime.onInstalled.addListener(async () => {
   const { settings } = await chrome.storage.local.get('settings');
   await chrome.storage.local.set({ settings: { ...DEFAULT_SETTINGS, ...(settings || {}) } });
   getRates(false).catch(() => {});
   pruneCache().catch(() => {});
+  restoreFavsOnce().catch(() => {});
 });
 
 chrome.runtime.onStartup.addListener(() => {
   pruneCache().catch(() => {});
+  restoreFavsOnce().catch(() => {});
 });
 
 // ----------------------------- сообщения -----------------------------------

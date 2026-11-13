@@ -176,11 +176,12 @@
 }
 
 /* ===================== Блокировка окон входа и всплывашек ===================== */
+/* gfx-block — только у гостя: когда пользователь вошёл, окна входа не прячутся (см. loggedIn в content.js) */
 html.gfx-block .ant-modal-root:has([class*="login-modal"]),
 html.gfx-block [class*="login-modal-wrap"],
 html.gfx-block [class*="bottomLead--"],
-html.gfx-block [class*="surveyWrap--"],
-html.gfx-block [data-gfx-blocked] {
+html.gfx-block [data-gfx-blocked],
+html.gfx-nopop [class*="surveyWrap--"] {
   display: none !important;
 }
 
@@ -198,7 +199,7 @@ html.gfx-block[data-gfx-unlock] body {
 .gfx-card, .gfx-toast, .gfx-gate, .gfx-cart, .gfx-hdr { zoom: var(--gfx-zoom, 1); }
 .gfx-badge { zoom: var(--gfx-zoom-s, 1); }
 
-/* Родные «Вход» и «Заказы» в шапке скрыты, пока включено скрытие окон входа (Alt+L возвращает их). */
+/* Родные «Вход» и «Заказы» в шапке скрыты у гостя, пока включено скрытие окон входа (Alt+L возвращает их). */
 html.gfx-block [data-gfx-native-hidden] { display: none !important; }
 
 /* ===================== Избранное и корзина ===================== */
@@ -313,6 +314,11 @@ html.gfx-block [data-gfx-native-hidden] { display: none !important; }
   margin-left: 16px;
   white-space: nowrap;
 }
+/* Родной блок «Вход/Заказы» шириной 240px. Вошедшему видны и ник, и «Заказы», и наши ссылки —
+ * вместе они не влезают и наезжают на поиск. Блок растёт по содержимому, строка поиска сужается. */
+[class*="user-order-container"]:has(> .gfx-hdr) { width: auto !important; max-width: none !important; flex: 0 0 auto !important; }
+[class*="header-right"]:has(.gfx-hdr) { min-width: 0 !important; }
+[class*="header-right"]:has(.gfx-hdr) > [class*="search-container"] { flex: 0 1 auto !important; min-width: 280px; }
 /* разделитель-палочка между ссылками, как в шапках старых сайтов */
 .gfx-hdr-fav + .gfx-hdr-fav { margin-left: 8px; padding-left: 8px; border-left: 1px solid #b38f00; }
 .gfx-hdr-fav {

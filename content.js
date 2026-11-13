@@ -934,11 +934,82 @@
     st.setProperty('--gfx-zoom-s', 1 + (k - 1) / 2);
   }
 
+  // Вошёл ли пользователь в аккаунт Goofish. Тогда окна входа не прячем: вошедшему Goofish показывает
+  // их, только когда нужно подтвердить вход, и скрытое окно помешало бы это сделать.
+  // Одной cookie unb мало: она остаётся и после незавершённого входа (застрял на проверке по SMS)
+  // и после истёкшей сессии. Поэтому при unb спрашиваем сервер тем же запросом, что делает шапка
+  // сайта при каждой загрузке: вошедшему он отвечает SUCCESS, остальным — «сессия истекла».
+  // Ответ кэшируем на 10 минут для этого набора cookie входа (unb и csg меняются при новом входе).
+  const LOGIN_API = 'mtop.taobao.idlemessage.pc.loginuser.get';
+  const LOGIN_TTL = 10 * 60e3;
+  const LOGIN_KEY = 'gfx:login';
+  const cookieVal = (n) => (document.cookie.match(new RegExp('(?:^|;\\s*)' + n + '=([^;]*)')) || [])[1] || '';
+  const loginSig = () => (cookieVal('unb') ? cookieVal('unb') + '|' + cookieVal('csg') : '');
+
+  function cachedLogin(sig) { // true | false | null (неизвестно)
+    if (!sig) return false;
+    try {
+      const c = JSON.parse(localStorage.getItem(LOGIN_KEY) || 'null');
+      if (c && c.sig === sig && Date.now() - c.ts < LOGIN_TTL) return c.ok;
+    } catch (e) { /* localStorage недоступен */ }
+    return null;
+  }
+
+  let wasLoggedIn = cachedLogin(loginSig()) === true;
+  let loginSigNow = loginSig();
+  let verifying = false;
+  let verifyAfter = 0; // после непонятного ответа или сбоя сети — не чаще раза в минуту
+
+  async function verifyLogin() {
+    const sig = loginSig();
+    if (verifying || !sig || Date.now() < verifyAfter) return;
+    verifying = true;
+    let ok = null;
+    try {
+      for (let i = 0; i < 2 && ok === null; i++) {
+        const j = await gfxMtop(LOGIN_API, {}, { needLoginPC: 'true', spm_cnt: 'a21ybx.home.0.0' });
+        const ret = String((j && j.ret && j.ret[0]) || '');
+        if (ret.startsWith('SUCCESS')) ok = true;
+        else if (/SESSION_EXPIRED|SESSION_INVALID|NOT_LOGIN|USER_VALIDATE|RGV587/i.test(ret)) ok = false;
+        else if (ret.startsWith('FAIL_SYS_TOKEN')) await new Promise((r) => setTimeout(r, 400)); // выдан свежий токен
+        else break;
+      }
+    } catch (e) { /* сеть: оставляем как было */ }
+    verifying = false;
+    if (ok === null) { verifyAfter = Date.now() + 60e3; return; }
+    try { localStorage.setItem(LOGIN_KEY, JSON.stringify({ sig, ok, ts: Date.now() })); } catch (e) { /* ignore */ }
+    if (sig !== loginSig() || ok === wasLoggedIn) return;
+    wasLoggedIn = ok;
+    if (ready) applyBlockClass();
+  }
+
   function applyBlockClass() {
     if (!IS_TOP) return;
-    const on = !!S.blockPopups && !pageUnblocked;
-    document.documentElement.classList.toggle('gfx-block', on);
-    if (!on) document.documentElement.removeAttribute('data-gfx-unlock');
+    const de = document.documentElement;
+    const on = !!S.blockPopups && !pageUnblocked && !wasLoggedIn;
+    de.classList.toggle('gfx-block', on);            // окна входа, плашка «Войдите», «Вход»/«Заказы» в шапке
+    de.classList.toggle('gfx-nopop', !!S.blockPopups); // опрос — скрываем и вошедшему
+    if (!on) {
+      de.removeAttribute('data-gfx-unlock');
+      if (gateEl) { gateEl.remove(); gateEl = null; }
+    }
+  }
+
+  // вход и выход — по QR в окне входа или в другой вкладке — замечаем без перезагрузки страницы
+  if (IS_TOP) {
+    const recheckLogin = () => {
+      const sig = loginSig();
+      if (sig === loginSigNow && (!sig || cachedLogin(sig) !== null)) return;
+      loginSigNow = sig;
+      const c = cachedLogin(sig);
+      if (c === null) { verifyLogin(); return; }
+      if (c === wasLoggedIn) return;
+      wasLoggedIn = c;
+      if (ready) applyBlockClass();
+    };
+    if (loginSigNow && cachedLogin(loginSigNow) === null) verifyLogin();
+    setInterval(recheckLogin, 2000);
+    document.addEventListener('visibilitychange', recheckLogin);
   }
 
   function notifyBlocked() {
@@ -988,7 +1059,7 @@
   }
 
   function checkPopups(root) {
-    if (!IS_TOP || !S.blockPopups || !root || root.nodeType !== 1) return;
+    if (!IS_TOP || !S.blockPopups || wasLoggedIn || !root || root.nodeType !== 1) return;
     const cls = typeof root.className === 'string' ? root.className : '';
     if (/login-modal/.test(cls) || root.querySelector('[class*="login-modal"]')) notifyBlocked();
     const frames = root.tagName === 'IFRAME' ? [root] : root.getElementsByTagName('iframe');
@@ -1130,6 +1201,7 @@
     } else if (e.code === 'KeyL' && IS_TOP) {
       e.preventDefault();
       e.stopPropagation();
+      if (wasLoggedIn) { toast('Вы вошли в аккаунт — окна входа и так не скрываются'); return; }
       pageUnblocked = !pageUnblocked;
       applyBlockClass();
       if (pageUnblocked && gateEl) { gateEl.remove(); gateEl = null; }
@@ -1187,7 +1259,11 @@
   });
 
   // ================================================================ boot
-  if (IS_TOP) document.documentElement.classList.add('gfx-block'); // по умолчанию сразу, до загрузки настроек
+  // по умолчанию сразу, до загрузки настроек (окна входа — только гостю)
+  if (IS_TOP) {
+    document.documentElement.classList.add('gfx-nopop');
+    if (!wasLoggedIn) document.documentElement.classList.add('gfx-block');
+  }
   startObserver(); // наблюдаем с самого начала; до ready события игнорируются, их покроет fullScan
 
   chrome.storage.local.get(null, (all) => {
